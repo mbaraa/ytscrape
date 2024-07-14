@@ -8,6 +8,7 @@ func main() {
 		return
 	}
 	for _, r := range res {
-		fmt.Println(r)
+		// _ = r
+		fmt.Printf("%+v\n", r)
 	}
 }

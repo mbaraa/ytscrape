@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 var (
-	keyPattern   = regexp.MustCompile(`"innertubeApiKey":"([^"]*)`)
-	dataPattern  = regexp.MustCompile(`ytInitialData[^{]*(.*?);\s*<\/script>`)
-	dataPattern2 = regexp.MustCompile(`ytInitialData"[^{]*(.*);\s*window\["ytInitialPlayerResponse"\]`)
+	keyPattern     = regexp.MustCompile(`"innertubeApiKey":"([^"]*)`)
+	dataPattern    = regexp.MustCompile(`ytInitialData[^{]*(.*?);\s*<\/script>`)
+	altDataPattern = regexp.MustCompile(`ytInitialData"[^{]*(.*);\s*window\["ytInitialPlayerResponse"\]`)
 )
 
 type videoResult struct {
@@ -20,6 +21,7 @@ type videoResult struct {
 	Url          string `json:"url"`
 	Duration     string `json:"duration"`
 	ThumbnailUrl string `json:"thumbnail_src"`
+	Views        string `json:"views"`
 	Uploader     string `json:"username"`
 }
 
@@ -50,6 +52,17 @@ type videoRenderer struct {
 			Text string `json:"text"`
 		} `json:"runs"`
 	} `json:"ownerText"`
+	ViewCountText struct {
+		SimpleText string   `json:"simpleText"`
+		Runs       []string `json:"runs"`
+	} `json:"viewCountText"`
+	NavigationEndpoint struct {
+		CommandMetadata struct {
+			WebCommandMetadata struct {
+				URL string `json:"url"`
+			} `json:"webCommandMetadata"`
+		} `json:"commandMetadata"`
+	} `json:"navigationEndpoint"`
 }
 
 type ytSearchData struct {
@@ -98,7 +111,7 @@ func search(q string) ([]videoResult, error) {
 		jojo.Parser += ".object_var"
 	} else {
 		jojo.Parser += ".original"
-		matches = dataPattern2.FindSubmatch(respBody)
+		matches = altDataPattern.FindSubmatch(respBody)
 	}
 	data := ytSearchData{}
 	err = json.Unmarshal(matches[1], &data)
@@ -108,20 +121,26 @@ func search(q string) ([]videoResult, error) {
 	jojo.EstimatedResults = data.EstimatedResults
 
 	// parse JSON data
-
 	resSuka := make([]videoResult, 0)
 	for _, sectionList := range data.Contents.TwoColumnSearchResultsRenderer.PrimaryContents.SectionListRenderer.Contents {
 		for _, content := range sectionList.ItemSectionRenderer.Contents {
-			_ = content
 			if content.VideoRenderer.VideoId == "" {
 				continue
+			}
+			views := ""
+			if content.VideoRenderer.ViewCountText.SimpleText != "" {
+				views = content.VideoRenderer.ViewCountText.SimpleText
+			} else if len(content.VideoRenderer.ViewCountText.Runs) > 0 {
+				views = strings.Join(content.VideoRenderer.ViewCountText.Runs, "")
 			}
 			resSuka = append(resSuka, videoResult{
 				Id:           content.VideoRenderer.VideoId,
 				Title:        content.VideoRenderer.Title.Runs[0].Text,
+				Url:          "https://youtube.com/watch?v=" + content.VideoRenderer.VideoId,
 				Duration:     content.VideoRenderer.LengthText.SimpleText,
 				ThumbnailUrl: content.VideoRenderer.Thumbnail.Thumbnails[len(content.VideoRenderer.Thumbnail.Thumbnails)-1].URL,
 				Uploader:     content.VideoRenderer.OwnerText.Runs[0].Text,
+				Views:        views,
 			})
 		}
 	}
