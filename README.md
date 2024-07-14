@@ -4,6 +4,7 @@
 
 [![Deployment status](https://github.com/mbaraa/ytscrape/actions/workflows/rex-deploy.yml/badge.svg)](https://github.com/mbaraa/ytscrape/actions/workflows/rex-deploy.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mbaraa/ytscrape)](https://goreportcard.com/report/github.com/mbaraa/ytscrape)
+[![GoDoc](https://godoc.org/github.com/mbaraa/ytscrape?status.png)](https://godoc.org/github.com/mbaraa/ytscrape)
 
 # Contributing
 
