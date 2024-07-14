@@ -2,7 +2,6 @@ package ytscrape
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -145,15 +144,11 @@ func Search(q string) ([]VideoResult, error) {
 			}
 			var views int64 = 0
 			if content.VideoRenderer.ViewCountText.SimpleText != "" {
-				views, _ = strconv.ParseInt(content.VideoRenderer.ViewCountText.SimpleText, 10, 64)
+				views, _ = strconv.ParseInt(filterNonDigits(content.VideoRenderer.ViewCountText.SimpleText), 10, 64)
 			} else if len(content.VideoRenderer.ViewCountText.Runs) > 0 {
-				views, _ = strconv.ParseInt(strings.Join(content.VideoRenderer.ViewCountText.Runs, ""), 10, 64)
+				views, _ = strconv.ParseInt(filterNonDigits(strings.Join(content.VideoRenderer.ViewCountText.Runs, "")), 10, 64)
 			}
-			duration, err := getDuration(content.VideoRenderer.LengthText.SimpleText)
-			if err != nil {
-				fmt.Println(err)
-			}
-
+			duration, _ := getDuration(content.VideoRenderer.LengthText.SimpleText)
 			results = append(results, VideoResult{
 				Id:           content.VideoRenderer.VideoId,
 				Title:        content.VideoRenderer.Title.Runs[0].Text,

@@ -18,7 +18,6 @@ var getDuration = durationer()
 func durationer() func(strDuration string) (time.Duration, error) {
 	durationSeparators := [3]rune{'s', 'm', 'h'}
 	return func(strDuration string) (time.Duration, error) {
-		startIdx := 0
 		colonsCount := 0
 		for _, chr := range strDuration {
 			if chr == ':' {
@@ -28,21 +27,16 @@ func durationer() func(strDuration string) (time.Duration, error) {
 		if colonsCount > 2 {
 			return 0, errors.New("invalid iso duration")
 		}
-		for i, chr := range strDuration {
-			if unicode.IsDigit(chr) {
-				startIdx = i
-				break
-			}
-		}
 		refinedStrDuration := strings.Builder{}
-		for i, chr := range strDuration[startIdx:] {
-			if chr == ':' || i == len(strDuration)-1 {
+		for _, chr := range strDuration {
+			if chr == ':' {
 				refinedStrDuration.WriteRune(durationSeparators[colonsCount])
 				colonsCount--
 				continue
 			}
 			refinedStrDuration.WriteRune(chr)
 		}
+		refinedStrDuration.WriteRune(durationSeparators[colonsCount])
 
 		duration, err := time.ParseDuration(refinedStrDuration.String())
 		if err != nil {
@@ -51,4 +45,14 @@ func durationer() func(strDuration string) (time.Duration, error) {
 
 		return duration, nil
 	}
+}
+
+func filterNonDigits(s string) string {
+	out := strings.Builder{}
+	for _, c := range s {
+		if unicode.IsDigit(c) {
+			out.WriteRune(c)
+		}
+	}
+	return out.String()
 }
