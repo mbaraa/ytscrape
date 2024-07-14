@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -15,14 +18,18 @@ var (
 	altDataPattern = regexp.MustCompile(`ytInitialData"[^{]*(.*);\s*window\["ytInitialPlayerResponse"\]`)
 )
 
-type videoResult struct {
-	Id           string `json:"id"`
-	Title        string `json:"title"`
-	Url          string `json:"url"`
-	Duration     string `json:"duration"`
-	ThumbnailUrl string `json:"thumbnail_src"`
-	Views        string `json:"views"`
-	Uploader     string `json:"username"`
+// VideoResult contains attributes of a video from yt search.
+type VideoResult struct {
+	Id           string        `json:"id"`
+	Title        string        `json:"title"`
+	Url          string        `json:"url"`
+	Duration     time.Duration `json:"duration"`
+	ThumbnailUrl string        `json:"thumbnail_src"`
+	Views        int64         `json:"views"`
+	Uploader     struct {
+		Title string `json:"title"`
+		Url   string `json:"url"`
+	} `json:"uploader"`
 }
 
 type req struct {
@@ -49,7 +56,14 @@ type videoRenderer struct {
 	} `json:"thumbnail"`
 	OwnerText struct {
 		Runs []struct {
-			Text string `json:"text"`
+			Text               string `json:"text"`
+			NavigationEndpoint struct {
+				CommandMetadata struct {
+					WebCommandMetadata struct {
+						URL string `json:"url"`
+					} `json:"webCommandMetadata"`
+				} `json:"commandMetadata"`
+			} `json:"navigationEndpoint"`
 		} `json:"runs"`
 	} `json:"ownerText"`
 	ViewCountText struct {
@@ -74,10 +88,11 @@ type ytSearchData struct {
 					Contents []struct { // sectionList
 						ItemSectionRenderer struct {
 							Contents []struct {
-								ChannelRenderer  any           `json:"channelRenderer"`
-								VideoRenderer    videoRenderer `json:"videoRenderer"`
-								RadioRenderer    any           `json:"radioRenderer"`
-								PlaylistRenderer any           `json:"playlistRenderer"`
+								VideoRenderer videoRenderer `json:"videoRenderer"`
+								// TODO: implement matchers for those.
+								ChannelRenderer  any `json:"channelRenderer"`
+								RadioRenderer    any `json:"radioRenderer"`
+								PlaylistRenderer any `json:"playlistRenderer"`
 							} `json:"contents"`
 						} `json:"itemSectionRenderer"`
 					} `json:"contents"`
@@ -87,7 +102,8 @@ type ytSearchData struct {
 	} `json:"contents"`
 }
 
-func search(q string) ([]videoResult, error) {
+// Search scraps YouTube and returns search results, and an occurring error.
+func Search(q string) ([]VideoResult, error) {
 	// get ze results
 	url := "https://www.youtube.com/results?q=" + url.QueryEscape(q)
 	resp, err := http.Get(url)
@@ -121,29 +137,40 @@ func search(q string) ([]videoResult, error) {
 	jojo.EstimatedResults = data.EstimatedResults
 
 	// parse JSON data
-	resSuka := make([]videoResult, 0)
+	results := make([]VideoResult, 0)
 	for _, sectionList := range data.Contents.TwoColumnSearchResultsRenderer.PrimaryContents.SectionListRenderer.Contents {
 		for _, content := range sectionList.ItemSectionRenderer.Contents {
 			if content.VideoRenderer.VideoId == "" {
 				continue
 			}
-			views := ""
+			var views int64 = 0
 			if content.VideoRenderer.ViewCountText.SimpleText != "" {
-				views = content.VideoRenderer.ViewCountText.SimpleText
+				views, _ = strconv.ParseInt(content.VideoRenderer.ViewCountText.SimpleText, 10, 64)
 			} else if len(content.VideoRenderer.ViewCountText.Runs) > 0 {
-				views = strings.Join(content.VideoRenderer.ViewCountText.Runs, "")
+				views, _ = strconv.ParseInt(strings.Join(content.VideoRenderer.ViewCountText.Runs, ""), 10, 64)
 			}
-			resSuka = append(resSuka, videoResult{
+			duration, err := getDuration(content.VideoRenderer.LengthText.SimpleText)
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			results = append(results, VideoResult{
 				Id:           content.VideoRenderer.VideoId,
 				Title:        content.VideoRenderer.Title.Runs[0].Text,
 				Url:          "https://youtube.com/watch?v=" + content.VideoRenderer.VideoId,
-				Duration:     content.VideoRenderer.LengthText.SimpleText,
+				Duration:     duration,
 				ThumbnailUrl: content.VideoRenderer.Thumbnail.Thumbnails[len(content.VideoRenderer.Thumbnail.Thumbnails)-1].URL,
-				Uploader:     content.VideoRenderer.OwnerText.Runs[0].Text,
-				Views:        views,
+				Uploader: struct {
+					Title string "json:\"title\""
+					Url   string "json:\"url\""
+				}{
+					Title: content.VideoRenderer.OwnerText.Runs[0].Text,
+					Url:   "https://www.youtube.com" + content.VideoRenderer.OwnerText.Runs[0].NavigationEndpoint.CommandMetadata.WebCommandMetadata.URL,
+				},
+				Views: views,
 			})
 		}
 	}
 
-	return resSuka, nil
+	return results, nil
 }
