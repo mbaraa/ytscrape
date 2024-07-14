@@ -1,0 +1,10 @@
+services:
+  app:
+    container_name: "ytscrape"
+    build:
+      context: .
+    image: "ytscrape-app"
+    restart: "always"
+    ports:
+      - "20256:8080"
+    stdin_open: true
